@@ -1,0 +1,99 @@
+
+YouTube Shorts Recommender System – CPU-Compatible Setup Instructions
+======================================================================
+
+This document provides detailed, beginner-friendly instructions for running the YouTube Shorts ML project
+WITHOUT requiring a GPU. It includes both a Google Colab (cloud-based) method and a local machine method.
+
+------------------------------------------------------------
+OPTION 1: Run on Google Colab (RECOMMENDED FOR MOST USERS)
+------------------------------------------------------------
+
+What is Google Colab?
+----------------------
+Google Colab is a free cloud service by Google that allows you to run Python notebooks in your browser.
+It comes with pre-installed machine learning libraries and offers free access to CPUs and GPUs.
+
+Think of it as a lightweight, beginner-friendly version of AWS, but much simpler and free for small-scale work.
+
+Why we recommend Colab:
+- No need to install anything
+- Free GPU/CPU provided
+- Fully supports TensorFlow, PyTorch, FAISS, etc.
+- Easy to share and reproduce results
+
+Steps to Run:
+-------------
+1. Visit: https://colab.research.google.com
+2. Click "File" → "Upload notebook"
+3. Upload the notebook file from the project (e.g., yt_shorts_recommender.ipynb)
+4. Once open, click "Runtime" → "Change runtime type"
+5. Under "Hardware accelerator", select:
+    - GPU (optional if you want faster training)
+    - OR select "None" to use CPU only
+6. Run each cell one by one using Shift+Enter
+
+Note:
+- FAISS will automatically fallback to CPU if GPU is not available
+- Training may be slower, but works just fine
+- You can connect to Google Drive to persist data
+
+------------------------------------------------------------
+OPTION 2: Run Locally (on your laptop/desktop with CPU)
+------------------------------------------------------------
+
+Requirements:
+-------------
+- Python 3.8+
+- pip or conda
+- Basic command line access (Terminal or CMD)
+
+Steps to Setup:
+---------------
+1. Create and activate a Python environment:
+
+Using conda:
+-------------
+conda create -n yt-shorts python=3.9
+conda activate yt-shorts
+
+Using virtualenv:
+------------------
+python -m venv yt-shorts
+source yt-shorts/bin/activate  (or yt-shorts\Scripts\activate on Windows)
+
+2. Install dependencies:
+
+If using CPU-only:
+-------------------
+pip install -r requirements.txt
+pip uninstall tensorflow
+pip install tensorflow-cpu
+
+If FAISS gives issues, install CPU version:
+-------------------------------------------
+pip install faiss-cpu
+
+3. Run the project:
+
+Typical entry points:
+---------------------
+python training/train.py             # For model training
+python api/api.py                    # To launch the FastAPI recommendation server
+streamlit run api/app.py             # (Optional) To launch the demo UI
+
+Tips:
+-----
+- Avoid using large batch sizes on CPU; reduce to 32 or lower
+- Training will be slower than GPU, but the system is fully compatible
+
+------------------------------------------------------------
+Notes and Additional Options
+------------------------------------------------------------
+- If you're familiar with Docker, a Dockerfile is included
+- For enterprise deployments, you may consider using AWS/GCP, but Colab is easiest for learning
+- We can also provide a trimmed "CPU-only Notebook" version if needed
+
+Need help?
+----------
+Reach out to the support channel or contact your mentor via email or Slack.

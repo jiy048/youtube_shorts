@@ -1,0 +1,210 @@
+# YouTube Shorts Recommendation System Makefile
+.PHONY: help install setup data train api test clean docker docker-clean deploy
+
+# Variables
+PYTHON := python3.11
+PIP := pip
+DOCKER := docker
+DOCKER_COMPOSE := docker-compose
+
+# Default target
+help:
+	@echo "Available commands:"
+	@echo "  install      - Install Python dependencies"
+	@echo "  setup        - Setup project (install + create directories)"
+	@echo "  data         - Generate synthetic data"
+	@echo "  validate     - Validate data quality"
+	@echo "  train        - Train the ML models"
+	@echo "  api          - Start the API server (development)"
+	@echo "  test         - Run tests"
+	@echo "  test-api     - Test the API endpoints"
+	@echo "  lint         - Run code linting"
+	@echo "  format       - Format code with black"
+	@echo "  clean        - Clean temporary files"
+	@echo "  docker       - Build and run with Docker"
+	@echo "  docker-clean - Clean Docker resources"
+	@echo "  deploy       - Deploy with docker-compose"
+	@echo "  mlflow       - Start MLflow UI"
+	@echo "  jupyter      - Start Jupyter notebook"
+
+# Development setup
+install:
+	@echo "Installing dependencies..."
+	$(PIP) install -r requirements.txt
+	@echo "✓ Dependencies installed"
+
+setup: install
+	@echo "Setting up project structure..."
+	mkdir -p data models logs mlruns monitoring/grafana/{dashboards,datasources}
+	@echo "✓ Project setup complete"
+
+# Data pipeline
+data:
+	@echo "Generating synthetic data..."
+	$(PYTHON) data_generator.py
+	@echo "✓ Synthetic data generated"
+
+validate:
+	@echo "Validating data..."
+	$(PYTHON) data_validation.py
+	@echo "✓ Data validation complete"
+
+# Training pipeline
+train: data validate
+	@echo "Starting training pipeline..."
+	$(PYTHON) train.py
+	@echo "✓ Training complete"
+
+# API server
+api:
+	@echo "Starting API server..."
+	uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+
+api-prod:
+	@echo "Starting production API server..."
+	uvicorn api:app --host 0.0.0.0 --port 8000 --workers 4
+
+# Testing
+test:
+	@echo "Running unit tests..."
+	pytest tests/ -v --tb=short
+	@echo "✓ Tests complete"
+
+test-api:
+	@echo "Testing API endpoints..."
+	$(PYTHON) test_api.py
+	@echo "✓ API tests complete"
+
+test-load:
+	@echo "Running load tests..."
+	locust -f locustfile.py --headless -u 10 -r 2 -t 60s --host http://localhost:8000
+	@echo "✓ Load tests complete"
+
+# Code quality
+lint:
+	@echo "Running linting..."
+	flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+	flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+	@echo "✓ Linting complete"
+
+format:
+	@echo "Formatting code..."
+	black . --line-length 127
+	isort . --profile black
+	@echo "✓ Code formatted"
+
+# Utilities
+clean:
+	@echo "Cleaning temporary files..."
+	find . -type f -name "*.pyc" -delete
+	find . -type d -name "__pycache__" -delete
+	find . -type d -name "*.egg-info" -exec rm -rf {} +
+	rm -rf .pytest_cache/
+	rm -rf .coverage
+	@echo "✓ Cleanup complete"
+
+mlflow:
+	@echo "Starting MLflow UI..."
+	mlflow ui --host 0.0.0.0 --port 5000
+
+jupyter:
+	@echo "Starting Jupyter notebook..."
+	jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+
+# Docker commands
+docker-build:
+	@echo "Building Docker image..."
+	$(DOCKER) build -t yt-shorts-api .
+
+docker-build-train:
+	@echo "Building training Docker image..."
+	$(DOCKER) build -f Dockerfile.train -t yt-shorts-trainer .
+
+docker-run: docker-build
+	@echo "Running Docker container..."
+	$(DOCKER) run -p 8000:8000 --name yt-shorts-api yt-shorts-api
+
+docker-train: docker-build-train
+	@echo "Running training in Docker..."
+	$(DOCKER) run -v $(PWD)/data:/app/data -v $(PWD)/models:/app/models yt-shorts-trainer
+
+docker-clean:
+	@echo "Cleaning Docker resources..."
+	$(DOCKER) system prune -f
+	$(DOCKER) volume prune -f
+
+# Docker Compose deployment
+deploy:
+	@echo "Deploying with docker-compose..."
+	$(DOCKER_COMPOSE) up -d
+	@echo "✓ Deployment complete"
+	@echo "API: http://localhost:8000"
+	@echo "MLflow: http://localhost:5000"
+	@echo "Prometheus: http://localhost:9090"
+	@echo "Grafana: http://localhost:3000 (admin/admin123)"
+
+deploy-with-training:
+	@echo "Deploying with training service..."
+	$(DOCKER_COMPOSE) --profile training up -d
+
+stop:
+	@echo "Stopping services..."
+	$(DOCKER_COMPOSE) down
+
+logs:
+	@echo "Showing logs..."
+	$(DOCKER_COMPOSE) logs -f
+
+status:
+	@echo "Service status:"
+	$(DOCKER_COMPOSE) ps
+
+# Full pipeline
+full-pipeline: setup data train test
+	@echo "✓ Full pipeline complete!"
+
+# Production deployment
+prod-deploy: docker-build
+	@echo "Production deployment..."
+	$(DOCKER_COMPOSE) -f docker-compose.prod.yml up -d
+
+# Monitoring
+monitor:
+	@echo "Opening monitoring dashboards..."
+	@echo "Prometheus: http://localhost:9090"
+	@echo "Grafana: http://localhost:3000"
+	@echo "MLflow: http://localhost:5000"
+
+# Backup and restore
+backup:
+	@echo "Creating backup..."
+	tar -czf backup_$(shell date +%Y%m%d_%H%M%S).tar.gz data/ models/ mlruns/
+
+restore:
+	@echo "Usage: make restore BACKUP=backup_YYYYMMDD_HHMMSS.tar.gz"
+	@if [ -z "$(BACKUP)" ]; then echo "Please specify BACKUP file"; exit 1; fi
+	tar -xzf $(BACKUP)
+
+# Health checks
+health:
+	@echo "Checking service health..."
+	curl -f http://localhost:8000/health || echo "API not responding"
+	curl -f http://localhost:5000 || echo "MLflow not responding"
+	curl -f http://localhost:9090 || echo "Prometheus not responding"
+	curl -f http://localhost:3000 || echo "Grafana not responding"
+
+# Development workflow
+dev: setup data
+	@echo "Starting development environment..."
+	$(DOCKER_COMPOSE) up -d redis mlflow
+	@echo "Services started. Run 'make train' then 'make api' to start development."
+
+# CI/CD simulation
+ci: lint test train test-api
+	@echo "✓ CI pipeline complete"
+
+# Generate documentation
+docs:
+	@echo "Generating documentation..."
+	pdoc --html --output-dir docs/ *.py
+	@echo "✓ Documentation generated in docs/"
